@@ -1,0 +1,6 @@
+streamlit>=1.30.0
+pandas>=2.0.0
+plotly>=5.18.0
+pymupdf>=1.23.0
+markitdown>=0.0.1a4
+openpyxl>=3.1.0
