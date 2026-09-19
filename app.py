@@ -310,9 +310,16 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"เกิดข้อผิดพลาดในการสแกน: {e}")
 
+    # Check AI Vision Key status
+    has_ai_brain = bool(analyzer.get_gemini_api_key())
+    if has_ai_brain:
+        st.markdown('<div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 6px 10px; font-size: 0.78rem; color: #6ee7b7; margin-bottom: 8px;">🧠 <b>AI Vision พร้อมใช้งาน:</b> อ่านภาพถ่ายภาษาไทยอัตโนมัติ</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 6px 10px; font-size: 0.78rem; color: #fde68a; margin-bottom: 8px;">⚠️ <b>ยังไม่พบคีย์ AI:</b> รูปถ่ายจะถูกบันทึกชั่วคราวเพื่อให้กรอกยอดเอง</div>', unsafe_allow_html=True)
+
     # Direct Drag-and-Drop Receipt Uploader
     uploaded_files = st.file_uploader(
-        "📥 ลาก/วางไฟล์ใบเสร็จที่นี่:",
+        "📥 ลาก/วางไฟล์ หรือถ่ายรูปใบเสร็จที่นี่:",
         type=["pdf", "html", "htm", "png", "jpg", "jpeg", "docx", "xlsx", "txt"],
         accept_multiple_files=True,
         key="receipt_sidebar_uploader"
@@ -328,7 +335,9 @@ with st.sidebar:
                     f.write(uf.getbuffer())
                 new_count += 1
         if new_count > 0:
-            with st.spinner(f"กำลังประมวลผล {new_count} ใบเสร็จใหม่..."):
+            has_img = any(Path(uf.name).suffix.lower() in ['.jpg', '.jpeg', '.png', '.webp'] for uf in uploaded_files)
+            spin_txt = "🧠 กำลังให้สมอง AI Vision สแกนอ่านยอดเงินและรายการสินค้าจากภาพถ่าย..." if (has_img and has_ai_brain) else f"กำลังประมวลผล {new_count} ใบเสร็จใหม่..."
+            with st.spinner(spin_txt):
                 analyzer.analyze_all_receipts()
             st.toast(f"✅ เพิ่มและวิเคราะห์ใบเสร็จใหม่ {new_count} ไฟล์เรียบร้อย!", icon="🎉")
             st.success(f"นำเข้า {new_count} ไฟล์สำเร็จ!")

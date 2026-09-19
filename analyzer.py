@@ -410,6 +410,187 @@ def extract_receipt_fields(md_text: str, filename: str) -> Tuple[Dict[str, Any],
 
     return receipt_dict, items
 
+def get_gemini_api_key() -> str:
+    """Safely fetch Gemini API Key from Streamlit Secrets, environment, or .env."""
+    # 1. Streamlit Secrets (Cloud deployment)
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+            key = str(st.secrets["GEMINI_API_KEY"]).strip()
+            if key:
+                return key
+    except Exception:
+        pass
+
+    # 2. Environment variable
+    env_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if env_key:
+        return env_key
+
+    # 3. Local .env file
+    local_env = Path(__file__).resolve().parent / ".env"
+    if local_env.exists():
+        try:
+            with open(local_env, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("GEMINI_API_KEY="):
+                        k = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if k:
+                            return k
+        except Exception:
+            pass
+
+    # 4. Project 'เป็นผู้ช่วย' .env file
+    helper_env = Path(__file__).resolve().parent.parent / "เป็นผู้ช่วย" / ".env"
+    if helper_env.exists():
+        try:
+            with open(helper_env, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("GEMINI_API_KEY="):
+                        k = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if k:
+                            return k
+        except Exception:
+            pass
+
+    return ""
+
+def extract_receipt_with_gemini(file_path: Path, api_key: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]], str]:
+    """Extract receipt structured data from photo using Gemini Vision API."""
+    import urllib.request
+    import base64
+    import json
+
+    ext = file_path.suffix.lower()
+    mime_type = "image/jpeg"
+    if ext == ".png":
+        mime_type = "image/png"
+    elif ext == ".webp":
+        mime_type = "image/webp"
+
+    with open(file_path, "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    prompt = """คุณคือผู้เชี่ยวชาญด้านการวิเคราะห์ใบเสร็จ ใบกำกับภาษี และบิลซื้อสินค้าของประเทศไทย
+กรุณาส่องอ่านรูปภาพใบเสร็จนี้อย่างละเอียด และตอบกลับเป็น JSON ตามโครงสร้างนี้เท่านั้น:
+{
+  "store_name": "ชื่อร้านค้า หรือ บริษัทผู้ขาย เช่น สยามแม็คโคร, บิ๊กซี, เอส.อาร์.ซุปเปอร์มาร์ท, เซเว่น หรือร้านค้าทั่วไป",
+  "branch": "สาขา เช่น เพชรบูรณ์ หรือ สาขาที่ 00070 (ถ้ามี)",
+  "receipt_number": "เลขที่ใบเสร็จ หรือ เลขที่เอกสาร (ถ้ามี)",
+  "date": "วันที่ในบิล รูปแบบ YYYY-MM-DD (เช่น 2026-09-19 หากเป็นปี พ.ศ. ให้แปลงเป็น ค.ศ.)",
+  "time": "เวลาในบิล เช่น 14:30 (ถ้ามี)",
+  "total_amount": 0.0,
+  "subtotal_amount": 0.0,
+  "vat_amount": 0.0,
+  "payment_method": "เงินสด, โอนเงิน/พร้อมเพย์, หรือ บัตรเครดิต",
+  "items": [
+    {
+      "item_name": "ชื่อสินค้า",
+      "quantity": 1.0,
+      "unit_price": 0.0,
+      "total_price": 0.0
+    }
+  ]
+}
+ข้อกำหนดสำคัญ:
+- ตัวเลขยอดเงินต้องเป็นตัวเลข Float ห้ามมีลูกน้ำจุลภาค
+- หากไม่พบข้อมูลบางช่อง ให้ใส่สตริงว่าง "" หรือ 0.0
+- หากชื่อร้านไม่ชัดเจน ให้ประมาณการชื่อร้านที่ใกล้เคียงที่สุดจากข้อความในบิล
+"""
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": img_b64
+                        }
+                    },
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "response_mime_type": "application/json",
+            "temperature": 0.1
+        }
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+
+    with urllib.request.urlopen(req, timeout=35) as response:
+        resp_data = json.loads(response.read().decode("utf-8"))
+        text_content = resp_data["candidates"][0]["content"]["parts"][0]["text"]
+        data = json.loads(text_content)
+
+    store_name = data.get("store_name") or "ร้านค้าทั่วไป"
+    branch = data.get("branch") or ""
+    receipt_no = data.get("receipt_number") or f"IMG-{file_path.stem}"
+    date_str = data.get("date") or datetime.today().strftime("%Y-%m-%d")
+    time_str = data.get("time") or ""
+    total_amount = float(data.get("total_amount") or 0.0)
+    vat_amount = float(data.get("vat_amount") or 0.0)
+    subtotal_amount = float(data.get("subtotal_amount") or max(0.0, total_amount - vat_amount))
+    payment_method = data.get("payment_method") or "ไม่ระบุ"
+    raw_items = data.get("items") or []
+
+    items = []
+    for item in raw_items:
+        items.append({
+            "item_name": item.get("item_name") or "สินค้า",
+            "quantity": float(item.get("quantity") or 1.0),
+            "unit_price": float(item.get("unit_price") or 0.0),
+            "total_price": float(item.get("total_price") or 0.0)
+        })
+
+    if total_amount == 0.0 and items:
+        total_amount = sum(i["total_price"] for i in items)
+
+    receipt_dict = {
+        "receipt_number": receipt_no,
+        "date": date_str,
+        "time": time_str,
+        "store_name": store_name,
+        "branch": branch,
+        "total_amount": total_amount,
+        "subtotal_amount": subtotal_amount,
+        "vat_amount": vat_amount,
+        "payment_method": payment_method,
+        "raw_file": file_path.name,
+        "markdown_file": "",
+        "notes": f"สแกนอัตโนมัติด้วย AI Vision จากภาพถ่าย {file_path.name}"
+    }
+
+    # Build Markdown
+    md_lines = [
+        f"# ใบเสร็จ/ใบกำกับภาษี: {store_name}",
+        f"- **เลขที่:** {receipt_no}",
+        f"- **วันที่:** {date_str} {time_str}",
+        f"- **สาขา:** {branch}",
+        f"- **การชำระเงิน:** {payment_method}",
+        f"- **ยอดรวมสุทธิ:** ฿{total_amount:,.2f}",
+        f"- **VAT (7%):** ฿{vat_amount:,.2f}",
+        "",
+        "## รายการสินค้า",
+        "| รายการ | จำนวน | ราคา/หน่วย | รวม |",
+        "|---|---|---|---|"
+    ]
+    for it in items:
+        md_lines.append(f"| {it['item_name']} | {it['quantity']} | ฿{it['unit_price']:,.2f} | ฿{it['total_price']:,.2f} |")
+    md_text = "\n".join(md_lines)
+
+    return receipt_dict, items, md_text
+
 def process_file(file_path: Path, md_converter=None) -> Dict[str, Any]:
     CONVERTED_DIR.mkdir(parents=True, exist_ok=True)
     md_output_path = CONVERTED_DIR / f"{file_path.stem}.md"
@@ -423,6 +604,30 @@ def process_file(file_path: Path, md_converter=None) -> Dict[str, Any]:
             with open(file_path, 'r', encoding='utf-8') as f:
                 md_text = f.read()
             receipt_data, items = extract_receipt_fields(md_text, file_path.name)
+        elif file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.webp']:
+            gemini_key = get_gemini_api_key()
+            if gemini_key:
+                try:
+                    receipt_data, items, md_text = extract_receipt_with_gemini(file_path, gemini_key)
+                    with open(md_output_path, 'w', encoding='utf-8') as f:
+                        f.write(md_text)
+                except Exception as ex_gemini:
+                    print(f"[WARN] Gemini Vision failed for {file_path.name}: {ex_gemini}")
+                    if md_converter is None:
+                        md_converter = MarkItDown()
+                    result = md_converter.convert(str(file_path))
+                    md_text = result.text_content or ""
+                    with open(md_output_path, 'w', encoding='utf-8') as f:
+                        f.write(md_text)
+                    receipt_data, items = extract_receipt_fields(md_text, file_path.name)
+            else:
+                if md_converter is None:
+                    md_converter = MarkItDown()
+                result = md_converter.convert(str(file_path))
+                md_text = result.text_content or ""
+                with open(md_output_path, 'w', encoding='utf-8') as f:
+                    f.write(md_text)
+                receipt_data, items = extract_receipt_fields(md_text, file_path.name)
         else:
             if md_converter is None:
                 md_converter = MarkItDown()
