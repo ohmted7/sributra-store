@@ -327,21 +327,28 @@ with st.sidebar:
     if uploaded_files:
         save_dir = Path(__file__).resolve().parent / "extracted_receipts"
         save_dir.mkdir(parents=True, exist_ok=True)
-        new_count = 0
-        for uf in uploaded_files:
-            target_path = save_dir / uf.name
-            if not target_path.exists() or target_path.stat().st_size == 0:
-                with open(target_path, "wb") as f:
-                    f.write(uf.getbuffer())
-                new_count += 1
-        if new_count > 0:
-            has_img = any(Path(uf.name).suffix.lower() in ['.jpg', '.jpeg', '.png', '.webp'] for uf in uploaded_files)
-            spin_txt = "🧠 กำลังให้สมอง AI Vision สแกนอ่านยอดเงินและรายการสินค้าจากภาพถ่าย..." if (has_img and has_ai_brain) else f"กำลังประมวลผล {new_count} ใบเสร็จใหม่..."
-            with st.spinner(spin_txt):
-                analyzer.analyze_all_receipts()
-            st.toast(f"✅ เพิ่มและวิเคราะห์ใบเสร็จใหม่ {new_count} ไฟล์เรียบร้อย!", icon="🎉")
-            st.success(f"นำเข้า {new_count} ไฟล์สำเร็จ!")
-            st.rerun()
+        uploaded_sig = tuple(sorted((uf.name, uf.size) for uf in uploaded_files))
+        if st.session_state.get("_last_uploaded_sig") != uploaded_sig:
+            st.session_state["_last_uploaded_sig"] = uploaded_sig
+            processed_count = 0
+            with st.spinner("🧠 กำลังให้สมอง AI Vision วิเคราะห์สแกนใบเสร็จ..."):
+                for uf in uploaded_files:
+                    if uf.size == 0:
+                        continue
+                    target_path = save_dir / uf.name
+                    with open(target_path, "wb") as f:
+                        f.write(uf.getbuffer())
+                    analyzer.process_file(target_path)
+                    processed_count += 1
+            if processed_count > 0:
+                st.toast(f"✅ สแกนและวิเคราะห์ใบเสร็จ {processed_count} ไฟล์สำเร็จเรียบร้อย!", icon="🎉")
+                st.rerun()
+
+    if st.button("🔄 บังคับสแกนไฟล์ทั้งหมดใหม่ (Re-scan All)", use_container_width=True):
+        with st.spinner("กำลังสแกนและประมวลผลไฟล์ทั้งหมดใหม่อีกครั้ง..."):
+            analyzer.analyze_all_receipts()
+        st.toast("✅ สแกนและอัปเดตข้อมูลทุกไฟล์เสร็จสิ้น!", icon="🎉")
+        st.rerun()
 
     st.divider()
     st.subheader("🔍 ตัวกรองข้อมูล")
@@ -567,9 +574,23 @@ with tab_receipts:
         st.markdown(f"""
         <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;">
             <h4 style="color: #fca5a5; margin: 0 0 6px 0;">🚨 ตรวจพบใบเสร็จที่ยังไม่มียอดเงิน / อ่านข้อความไม่สำเร็จ ({len(zero_receipts)} รายการ)</h4>
-            <p style="color: #cbd5e1; font-size: 0.88rem; margin: 0 0 10px 0;">เกิดจากไฟล์รูปถ่ายที่ระบบไม่สามารถดึงตัวหนังสือดิจิทัลได้ สามารถกดลบออก หรือกดกรอกยอดเงินจริงได้ทันที:</p>
+            <p style="color: #cbd5e1; font-size: 0.88rem; margin: 0 0 10px 0;">เกิดจากไฟล์รูปถ่ายที่ระบบไม่สามารถดึงตัวหนังสือดิจิทัลได้ สามารถกดลบออก หรือกดให้ AI สแกนอ่านใหม่ได้ทันที:</p>
         </div>
         """, unsafe_allow_html=True)
+        z_act1, z_act2 = st.columns([1, 1])
+        with z_act1:
+            if st.button("🗑️ ลบใบเสร็จยอด ฿0.00 ทั้งหมดออกทันที", key="del_all_zero_recs", type="primary", use_container_width=True):
+                for zr in zero_receipts:
+                    db.delete_receipt(zr['id'])
+                st.toast("✅ ล้างใบเสร็จยอด ฿0.00 ทั้งหมดเรียบร้อยแล้ว!", icon="🗑️")
+                st.rerun()
+        with z_act2:
+            if st.button("🧠 สั่ง AI Vision สแกนอ่านใหม่อีกครั้ง", key="rescan_all_zero_recs", use_container_width=True):
+                with st.spinner("กำลังให้ AI Vision สแกนอ่านไฟล์ภาพ..."):
+                    analyzer.analyze_all_receipts()
+                st.toast("✅ AI Vision สแกนอ่านไฟล์เรียบร้อย!", icon="🎉")
+                st.rerun()
+        st.write("")
         for zr in zero_receipts:
             zc1, zc2, zc3 = st.columns([3, 1.2, 1.2])
             with zc1:

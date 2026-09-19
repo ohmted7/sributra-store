@@ -88,69 +88,105 @@ def extract_pdf_receipt(file_path: Path) -> Tuple[Dict[str, Any], List[Dict[str,
 
     # CASE A: Scanned Raster PDF (no embedded text)
     if not full_text:
-        reader = get_ocr_reader()
-        first_page = doc[0]
-        last_page = doc[-1]
+        # 1. Primary: Use Vision AI on rendered page
+        try:
+            pix = doc[0].get_pixmap(dpi=130)
+            tmp_img = file_path.parent / f"_tmp_pdf_{file_path.stem}.png"
+            pix.save(str(tmp_img))
+            try:
+                receipt_dict, items, md_repr = extract_receipt_with_gemini(tmp_img)
+                receipt_dict["raw_file"] = file_path.name
+                if not receipt_dict.get("notes"):
+                    receipt_dict["notes"] = f"สแกน PDF ผ่าน Vision AI ({file_path.name})"
+                return receipt_dict, items, md_repr
+            finally:
+                if tmp_img.exists():
+                    tmp_img.unlink(missing_ok=True)
+        except Exception as ex_vis:
+            print(f"[WARN] PDF Vision AI failed for {file_path.name}: {ex_vis}")
 
-        # 1. Top crop for Invoice Number & Date
-        r_first = first_page.rect
-        crop_top = fitz.Rect(r_first.width * 0.35, 0, r_first.width, r_first.height * 0.35)
-        top_ocr = reader.readtext(first_page.get_pixmap(clip=crop_top, dpi=120).tobytes('png'), detail=0)
-        top_str = ' '.join(top_ocr)
+        try:
+            reader = get_ocr_reader()
+            first_page = doc[0]
+            last_page = doc[-1]
 
-        # 2. Bottom crop for Totals & VAT
-        r_last = last_page.rect
-        crop_bottom = fitz.Rect(0, r_last.height * 0.65, r_last.width, r_last.height)
-        bot_ocr = reader.readtext(last_page.get_pixmap(clip=crop_bottom, dpi=120).tobytes('png'), detail=0)
-        bot_str = ' '.join(bot_ocr)
+            # 1. Top crop for Invoice Number & Date
+            r_first = first_page.rect
+            crop_top = fitz.Rect(r_first.width * 0.35, 0, r_first.width, r_first.height * 0.35)
+            top_ocr = reader.readtext(first_page.get_pixmap(clip=crop_top, dpi=120).tobytes('png'), detail=0)
+            top_str = ' '.join(top_ocr)
 
-        # Invoice No
-        m_inv = re.search(r'(E111\d{10})', top_str)
-        receipt_no = m_inv.group(1) if m_inv else f"INV-{file_path.stem}"
+            # 2. Bottom crop for Totals & VAT
+            r_last = last_page.rect
+            crop_bottom = fitz.Rect(0, r_last.height * 0.65, r_last.width, r_last.height)
+            bot_ocr = reader.readtext(last_page.get_pixmap(clip=crop_bottom, dpi=120).tobytes('png'), detail=0)
+            bot_str = ' '.join(bot_ocr)
 
-        # Date
-        dt = ""
-        m_d = re.search(r'(\d{1,2})\s*([^\s\d]{2,4})\s*(?:25)?(69|2026)', top_str)
-        if m_d:
-            d, mo_raw, y = m_d.groups()
-            for mo_k, mo_v in THAI_MONTHS.items():
-                if mo_k[0] in mo_raw:
-                    dt = f"2026-{mo_v}-{int(d):02d}"
+            # Invoice No
+            m_inv = re.search(r'(E111\d{10})', top_str)
+            receipt_no = m_inv.group(1) if m_inv else f"INV-{file_path.stem}"
+
+            # Date
+            dt = ""
+            m_d = re.search(r'(\d{1,2})\s*([^\s\d]{2,4})\s*(?:25)?(69|2026)', top_str)
+            if m_d:
+                d, mo_raw, y = m_d.groups()
+                for mo_k, mo_v in THAI_MONTHS.items():
+                    if mo_k[0] in mo_raw:
+                        dt = f"2026-{mo_v}-{int(d):02d}"
+                        break
+            if not dt:
+                cdate = doc.metadata.get('creationDate', '')
+                m_c = re.search(r'D:(\d{4})(\d{2})(\d{2})', cdate)
+                if m_c:
+                    dt = f"{m_c.group(1)}-{m_c.group(2)}-{m_c.group(3)}"
+                else:
+                    dt = datetime.today().strftime("%Y-%m-%d")
+
+            # Parse amounts using regex finding all decimals
+            nums = [float(n.replace(',', '')) for n in re.findall(r'[\d,]+\.\d{2}', bot_str)]
+            total_amount = max(nums) if nums else 0.0
+            vat_amount = 0.0
+            for n in nums:
+                if 0 < n <= total_amount * 0.10 and n != total_amount:
+                    vat_amount = n
                     break
-        if not dt:
-            cdate = doc.metadata.get('creationDate', '')
-            m_c = re.search(r'D:(\d{4})(\d{2})(\d{2})', cdate)
-            if m_c:
-                dt = f"{m_c.group(1)}-{m_c.group(2)}-{m_c.group(3)}"
-            else:
-                dt = datetime.today().strftime("%Y-%m-%d")
+            subtotal_amount = round(total_amount - vat_amount, 2) if total_amount > 0 else 0.0
 
-        # Parse amounts using regex finding all decimals
-        nums = [float(n.replace(',', '')) for n in re.findall(r'[\d,]+\.\d{2}', bot_str)]
-        total_amount = max(nums) if nums else 0.0
-        vat_amount = 0.0
-        for n in nums:
-            if 0 < n <= total_amount * 0.10 and n != total_amount:
-                vat_amount = n
-                break
-        subtotal_amount = round(total_amount - vat_amount, 2) if total_amount > 0 else 0.0
-
-        receipt_dict = {
-            "receipt_number": receipt_no,
-            "date": dt,
-            "time": "",
-            "store_name": "บิ๊กซี ซูเปอร์เซ็นเตอร์ บมจ. (สาขาเพชรบูรณ์)",
-            "branch": "สาขาที่ 00070",
-            "total_amount": total_amount,
-            "subtotal_amount": subtotal_amount,
-            "vat_amount": vat_amount,
-            "payment_method": "PODS / โอนเงิน",
-            "raw_file": file_path.name,
-            "markdown_file": "",
-            "notes": f"สแกนต้นฉบับ Big C (OCR สกัดสำเร็จ)"
-        }
-        md_repr = f"# ใบกำกับภาษี บิ๊กซี ซูเปอร์เซ็นเตอร์\n\n- เลขที่: {receipt_no}\n- วันที่: {dt}\n- ยอดรวม: {total_amount:,.2f} บาท\n- ภาษีมูลค่าเพิ่ม: {vat_amount:,.2f} บาท\n- สกัดจากภาพสแกน: {file_path.name}\n"
-        return receipt_dict, items, md_repr
+            receipt_dict = {
+                "receipt_number": receipt_no,
+                "date": dt,
+                "time": "",
+                "store_name": "บิ๊กซี ซูเปอร์เซ็นเตอร์ บมจ. (สาขาเพชรบูรณ์)",
+                "branch": "สาขาที่ 00070",
+                "total_amount": total_amount,
+                "subtotal_amount": subtotal_amount,
+                "vat_amount": vat_amount,
+                "payment_method": "PODS / โอนเงิน",
+                "raw_file": file_path.name,
+                "markdown_file": "",
+                "notes": f"สแกนต้นฉบับ Big C (OCR สกัดสำเร็จ)"
+            }
+            md_repr = f"# ใบกำกับภาษี บิ๊กซี ซูเปอร์เซ็นเตอร์\n\n- เลขที่: {receipt_no}\n- วันที่: {dt}\n- ยอดรวม: {total_amount:,.2f} บาท\n- ภาษีมูลค่าเพิ่ม: {vat_amount:,.2f} บาท\n- สกัดจากภาพสแกน: {file_path.name}\n"
+            return receipt_dict, items, md_repr
+        except Exception as ex_ocr:
+            print(f"[WARN] Local OCR fallback also failed: {ex_ocr}")
+            # Minimal fallback receipt
+            receipt_dict = {
+                "receipt_number": f"INV-{file_path.stem}",
+                "date": datetime.today().strftime("%Y-%m-%d"),
+                "time": "",
+                "store_name": "บิ๊กซี ซูเปอร์เซ็นเตอร์ บมจ.",
+                "branch": "เพชรบูรณ์",
+                "total_amount": 0.0,
+                "subtotal_amount": 0.0,
+                "vat_amount": 0.0,
+                "payment_method": "PODS / โอนเงิน",
+                "raw_file": file_path.name,
+                "markdown_file": "",
+                "notes": "สแกน PDF รอการประมวลผล"
+            }
+            return receipt_dict, items, f"# {file_path.name}\n"
 
     # CASE B: Digital Vector PDF (Rich text)
     receipt_no = ""
@@ -453,126 +489,58 @@ def get_gemini_api_key() -> str:
         except Exception:
             pass
 
-    # 5. Built-in default key for Private Repo (100% works without manual configuration)
-    return "AQ.Ab8RN6L3tTlP2gzTU_bRvSVInd8AvwmGWoLoy30k2_5yuCMzQg"
+    return "sk_TkkwwUFGJtdKY8RVPPFVuzFBzvuXcxf3mb06YMsXGnStVnaDIySwk84nA2XYd0Ao"
 
-def extract_receipt_with_gemini(file_path: Path, api_key: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]], str]:
-    """Extract receipt structured data from photo using Gemini Vision API."""
-    import urllib.request
-    import base64
-    import json
-    import re
-
-    ext = file_path.suffix.lower()
-    mime_type = "image/jpeg"
-    if ext == ".png":
-        mime_type = "image/png"
-    elif ext == ".webp":
-        mime_type = "image/webp"
-
-    with open(file_path, "rb") as f:
-        img_b64 = base64.b64encode(f.read()).decode("utf-8")
-
-    prompt = """คุณคือผู้เชี่ยวชาญด้านการวิเคราะห์ใบเสร็จ ใบกำกับภาษี และบิลซื้อสินค้าของประเทศไทย
-กรุณาส่องอ่านรูปภาพใบเสร็จนี้อย่างละเอียด และตอบกลับเป็น JSON ตามโครงสร้างนี้เท่านั้น:
-{
-  "store_name": "ชื่อร้านค้า หรือ บริษัทผู้ขาย เช่น สยามแม็คโคร, บิ๊กซี, เอส.อาร์.ซุปเปอร์มาร์ท, เซเว่น หรือร้านค้าทั่วไป",
-  "branch": "สาขา เช่น เพชรบูรณ์ หรือ สาขาที่ 00070 (ถ้ามี)",
-  "receipt_number": "เลขที่ใบเสร็จ หรือ เลขที่เอกสาร (ถ้ามี)",
-  "date": "วันที่ในบิล รูปแบบ YYYY-MM-DD (เช่น 2026-09-19 หากเป็นปี พ.ศ. ให้แปลงเป็น ค.ศ.)",
-  "time": "เวลาในบิล เช่น 14:30 (ถ้ามี)",
-  "total_amount": 0.0,
-  "subtotal_amount": 0.0,
-  "vat_amount": 0.0,
-  "payment_method": "เงินสด, โอนเงิน/พร้อมเพย์, หรือ บัตรเครดิต",
-  "items": [
-    {
-      "item_name": "ชื่อสินค้า",
-      "quantity": 1.0,
-      "unit_price": 0.0,
-      "total_price": 0.0
-    }
-  ]
-}
-ข้อกำหนดสำคัญ:
-- ตัวเลขยอดเงินต้องเป็นตัวเลข Float ห้ามมีลูกน้ำจุลภาค
-- หากไม่พบข้อมูลบางช่อง ให้ใส่สตริงว่าง "" หรือ 0.0
-- หากชื่อร้านไม่ชัดเจน ให้ประมาณการชื่อร้านที่ใกล้เคียงที่สุดจากข้อความในบิล
-"""
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": img_b64
-                        }
-                    },
-                    {
-                        "text": prompt
-                    }
-                ]
-            }
-        ],
-        "generationConfig": {
-            "response_mime_type": "application/json",
-            "temperature": 0.1
-        }
-    }
-
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-
-    with urllib.request.urlopen(req, timeout=35) as response:
-        resp_data = json.loads(response.read().decode("utf-8"))
-        
-        # Robustly extract JSON text from parts
-        text_content = ""
-        candidates = resp_data.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            for p in parts:
-                if "text" in p:
-                    t = p["text"].strip()
-                    if "{" in t and "}" in t:
-                        text_content = t
-                        break
-            if not text_content and parts and "text" in parts[-1]:
-                text_content = parts[-1]["text"]
-
-        clean_json = text_content.strip()
-        if "```" in clean_json:
-            m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', clean_json)
-            if m:
-                clean_json = m.group(1).strip()
-
-        data = json.loads(clean_json)
-
+def parse_ai_json_to_receipt(data: Dict[str, Any], file_path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]], str]:
+    """Helper to convert structured AI JSON output into receipt_dict, items, and markdown."""
     store_name = data.get("store_name") or "ร้านค้าทั่วไป"
     branch = data.get("branch") or ""
     receipt_no = data.get("receipt_number") or f"IMG-{file_path.stem}"
-    date_str = data.get("date") or datetime.today().strftime("%Y-%m-%d")
+    raw_date = data.get("date") or datetime.today().strftime("%Y-%m-%d")
     time_str = data.get("time") or ""
-    total_amount = float(data.get("total_amount") or 0.0)
-    vat_amount = float(data.get("vat_amount") or 0.0)
-    subtotal_amount = float(data.get("subtotal_amount") or max(0.0, total_amount - vat_amount))
-    payment_method = data.get("payment_method") or "ไม่ระบุ"
+
+    # Parse Buddhist era or DD/MM/YYYY into YYYY-MM-DD
+    date_str = parse_thai_date(str(raw_date))
+
+    try:
+        total_amount = float(str(data.get("total_amount", 0.0)).replace(',', ''))
+    except Exception:
+        total_amount = 0.0
+
+    try:
+        vat_amount = float(str(data.get("vat_amount", 0.0) or 0.0).replace(',', ''))
+    except Exception:
+        vat_amount = 0.0
+
+    try:
+        subtotal_amount = float(str(data.get("subtotal_amount", 0.0) or 0.0).replace(',', ''))
+    except Exception:
+        subtotal_amount = max(0.0, total_amount - vat_amount)
+
+    payment_method = data.get("payment_method") or "เงินสด"
     raw_items = data.get("items") or []
 
     items = []
     for item in raw_items:
+        i_name = item.get("name") or item.get("item_name") or "สินค้า"
+        try:
+            qty = float(item.get("quantity", 1.0))
+        except Exception:
+            qty = 1.0
+        try:
+            unit_p = float(item.get("unit_price", 0.0))
+        except Exception:
+            unit_p = 0.0
+        try:
+            tot_p = float(item.get("total_price") or item.get("amount") or (qty * unit_p))
+        except Exception:
+            tot_p = qty * unit_p
+
         items.append({
-            "item_name": item.get("item_name") or "สินค้า",
-            "quantity": float(item.get("quantity") or 1.0),
-            "unit_price": float(item.get("unit_price") or 0.0),
-            "total_price": float(item.get("total_price") or 0.0)
+            "item_name": i_name,
+            "quantity": qty,
+            "unit_price": unit_p,
+            "total_price": tot_p
         })
 
     if total_amount == 0.0 and items:
@@ -593,7 +561,7 @@ def extract_receipt_with_gemini(file_path: Path, api_key: str) -> Tuple[Dict[str
         "notes": f"สแกนอัตโนมัติด้วย AI Vision จากภาพถ่าย {file_path.name}"
     }
 
-    # Build Markdown
+    # Build Markdown summary
     md_lines = [
         f"# ใบเสร็จ/ใบกำกับภาษี: {store_name}",
         f"- **เลขที่:** {receipt_no}",
@@ -601,7 +569,7 @@ def extract_receipt_with_gemini(file_path: Path, api_key: str) -> Tuple[Dict[str
         f"- **สาขา:** {branch}",
         f"- **การชำระเงิน:** {payment_method}",
         f"- **ยอดรวมสุทธิ:** ฿{total_amount:,.2f}",
-        f"- **VAT (7%):** ฿{vat_amount:,.2f}",
+        f"- **VAT:** ฿{vat_amount:,.2f}",
         "",
         "## รายการสินค้า",
         "| รายการ | จำนวน | ราคา/หน่วย | รวม |",
@@ -612,6 +580,122 @@ def extract_receipt_with_gemini(file_path: Path, api_key: str) -> Tuple[Dict[str
     md_text = "\n".join(md_lines)
 
     return receipt_dict, items, md_text
+
+def extract_receipt_with_gemini(file_path: Path, api_key: str = None) -> Tuple[Dict[str, Any], List[Dict[str, Any]], str]:
+    """Extract receipt structured data using OKMD Gemini 3.8 Flash with Agnes AI fallback."""
+    import urllib.request
+    import base64
+    import json
+    import re
+
+    ext = file_path.suffix.lower()
+    mime_type = "image/jpeg"
+    if ext == ".png":
+        mime_type = "image/png"
+    elif ext == ".webp":
+        mime_type = "image/webp"
+
+    with open(file_path, "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    prompt = """คุณคือผู้เชี่ยวชาญด้านการวิเคราะห์ใบเสร็จ ใบกำกับภาษี และบิลซื้อสินค้าของประเทศไทย
+กรุณาส่องอ่านรูปภาพใบเสร็จนี้อย่างละเอียด และตอบกลับเป็น JSON ตามโครงสร้างนี้เท่านั้น:
+{
+  "store_name": "ชื่อร้านค้า เช่น หจก ไทยทอยส์ เพชรบูรณ์, สยามแม็คโคร, บิ๊กซี, เอส.อาร์.ซุปเปอร์มาร์ท",
+  "branch": "สาขา หรือ ที่อยู่ร้าน (ถ้ามี)",
+  "receipt_number": "เลขที่ใบเสร็จ หรือ เลขที่เอกสาร (ถ้ามี)",
+  "date": "วันที่ในบิล เช่น 2026-09-19 หรือ 19/09/2569",
+  "time": "เวลา เช่น 15:00",
+  "total_amount": 0.0,
+  "subtotal_amount": 0.0,
+  "vat_amount": 0.0,
+  "payment_method": "เงินสด, โอนเงิน/พร้อมเพย์, หรือ บัตร",
+  "items": [
+    {
+      "name": "ชื่อสินค้า",
+      "quantity": 1.0,
+      "unit_price": 0.0,
+      "total_price": 0.0
+    }
+  ]
+}
+ข้อกำหนดสำคัญ:
+- ตัวเลขยอดเงินต้องเป็นตัวเลข Float ห้ามมีลูกน้ำจุลภาค
+- ตอบกลับเฉพาะ JSON ที่ถูกต้องเท่านั้น ห้ามใส่ข้อความอธิบายอื่นนอกบล็อก JSON
+"""
+
+    # 1. Primary Engine: OKMD Gemini 3.8 Flash (Free national AI service)
+    okmd_key = "sk_TkkwwUFGJtdKY8RVPPFVuzFBzvuXcxf3mb06YMsXGnStVnaDIySwk84nA2XYd0Ao"
+    try:
+        url = "https://gen.ai.kku.ac.th/okmd/api/v1/chat/completions"
+        payload = {
+            "model": "gemini-3.8-flash",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{img_b64}"}}
+                    ]
+                }
+            ],
+            "temperature": 0.1
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {okmd_key}"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp_json = json.loads(resp.read().decode("utf-8"))
+            content = resp_json["choices"][0]["message"]["content"]
+            clean = content.strip()
+            if "```" in clean:
+                m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', clean)
+                if m:
+                    clean = m.group(1).strip()
+            data = json.loads(clean)
+            return parse_ai_json_to_receipt(data, file_path)
+    except Exception as ex_okmd:
+        print(f"[WARN] OKMD Vision failed ({ex_okmd}), falling back to Agnes AI...")
+
+    # 2. Secondary Engine: Agnes AI (agnes-3.0-flash)
+    agnes_key = "sk-e5ypYPPS3yaXJ6erdz5wNmSXw9Lt3MRI2IkvLJ7ta2fkHGz7"
+    try:
+        url = "https://apihub.agnes-ai.com/v1/chat/completions"
+        payload = {
+            "model": "agnes-3.0-flash",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{img_b64}"}}
+                    ]
+                }
+            ],
+            "temperature": 0.1
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {agnes_key}"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp_json = json.loads(resp.read().decode("utf-8"))
+            content = resp_json["choices"][0]["message"]["content"]
+            clean = content.strip()
+            if "```" in clean:
+                m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', clean)
+                if m:
+                    clean = m.group(1).strip()
+            data = json.loads(clean)
+            return parse_ai_json_to_receipt(data, file_path)
+    except Exception as ex_agnes:
+        print(f"[ERROR] Agnes Vision also failed: {ex_agnes}")
+        raise ex_agnes
 
 def process_file(file_path: Path, md_converter=None) -> Dict[str, Any]:
     CONVERTED_DIR.mkdir(parents=True, exist_ok=True)
