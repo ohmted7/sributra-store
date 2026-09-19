@@ -28,17 +28,16 @@ st.set_page_config(
 # Initialize database
 db.init_db()
 
-# Custom Luxury FinTech Styling
+# Custom Luxury FinTech Dark Styling - High Contrast & Crystal Clear
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap');
     
-    /* Global Typography - exclude material symbol icons to prevent broken text glyphs */
+    /* Global Typography - protect icons from distortion */
     html, body, .stApp, .stMarkdown, p, h1, h2, h3, h4, h5, h6, label {
         font-family: 'Prompt', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
     
-    /* Crucial: Protect Streamlit icons from being overridden into text words */
     [data-testid="stIconMaterial"], 
     .material-symbols-rounded, 
     .material-symbols-outlined, 
@@ -57,11 +56,12 @@ st.markdown("""
     /* Hero Header Banner */
     .hero-header {
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0369a1 100%);
+        border: 1px solid #334155;
         border-radius: 16px;
         padding: 22px 26px;
-        color: white;
+        color: #f8fafc;
         margin-bottom: 20px;
-        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.18), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -73,11 +73,11 @@ st.markdown("""
         font-weight: 700;
         letter-spacing: -0.02em;
         margin: 0;
-        color: #ffffff;
+        color: #ffffff !important;
     }
     .hero-subtitle {
         font-size: 0.92rem;
-        color: #cbd5e1;
+        color: #94a3b8 !important;
         margin-top: 6px;
         margin-bottom: 0;
     }
@@ -94,8 +94,7 @@ st.markdown("""
         border-radius: 9999px;
         font-size: 0.82rem;
         font-weight: 600;
-        background: rgba(255, 255, 255, 0.12);
-        backdrop-filter: blur(8px);
+        background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.2);
         color: #f8fafc;
     }
@@ -110,13 +109,13 @@ st.markdown("""
         color: #93c5fd;
     }
     
-    /* Modern Metric Cards - Strict Equal Height & Truncation Guard */
+    /* Modern Metric Cards - Slate Dark High-Contrast */
     .metric-card-lux {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
         border-radius: 14px;
         padding: 16px 18px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
         overflow: hidden;
@@ -128,8 +127,8 @@ st.markdown("""
     }
     .metric-card-lux:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 18px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-        border-color: #cbd5e1;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+        border-color: #475569 !important;
     }
     .metric-card-lux::before {
         content: '';
@@ -147,7 +146,7 @@ st.markdown("""
     .metric-label-lux {
         font-size: 0.84rem;
         font-weight: 600;
-        color: #475569;
+        color: #94a3b8 !important;
         margin-bottom: 4px;
         display: flex;
         align-items: center;
@@ -157,7 +156,7 @@ st.markdown("""
     .metric-value-lux {
         font-size: clamp(1.2rem, 1.6vw, 1.55rem);
         font-weight: 700;
-        color: #0f172a;
+        color: #f8fafc !important;
         line-height: 1.25;
         margin: 4px 0;
         white-space: nowrap;
@@ -166,7 +165,7 @@ st.markdown("""
     }
     .metric-sub-lux {
         font-size: 0.78rem;
-        color: #64748b;
+        color: #cbd5e1 !important;
         margin-top: 2px;
         line-height: 1.3;
         white-space: nowrap;
@@ -174,10 +173,10 @@ st.markdown("""
         text-overflow: ellipsis;
     }
     
-    /* Modern Tabs */
+    /* Modern Tabs in Dark Theme */
     div[data-baseweb="tab-list"] {
         gap: 6px;
-        border-bottom: 2px solid #e2e8f0;
+        border-bottom: 2px solid #334155 !important;
         padding-bottom: 2px;
         margin-bottom: 18px;
     }
@@ -186,24 +185,63 @@ st.markdown("""
         padding: 9px 16px !important;
         font-weight: 600 !important;
         font-size: 0.92rem !important;
-        color: #64748b !important;
+        color: #94a3b8 !important;
         transition: all 0.15s ease-in-out;
     }
     button[data-baseweb="tab"]:hover {
-        color: #0284c7 !important;
-        background-color: #f1f5f9;
+        color: #38bdf8 !important;
+        background-color: #1e293b !important;
     }
     button[data-baseweb="tab"][aria-selected="true"] {
-        background-color: #e0f2fe !important;
+        background-color: #1e293b !important;
         border-bottom: 3px solid #0284c7 !important;
-        color: #0369a1 !important;
+        color: #38bdf8 !important;
     }
     
-    /* Sidebar Styling */
+    /* Sidebar Styling - Crystal Clear High Contrast */
     section[data-testid="stSidebar"] {
-        background-color: #f8fafc;
-        border-right: 1px solid #e2e8f0;
+        background-color: #0f172a !important;
+        border-right: 1px solid #1e293b !important;
     }
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] .stMarkdown {
+        color: #f8fafc !important;
+    }
+    section[data-testid="stSidebar"] label {
+        font-weight: 600 !important;
+        font-size: 0.88rem !important;
+        color: #e2e8f0 !important;
+    }
+    
+    /* Crisp Input Fields in Sidebar */
+    section[data-testid="stSidebar"] input,
+    section[data-testid="stSidebar"] div[data-baseweb="input"],
+    section[data-testid="stSidebar"] div[data-baseweb="select"] {
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+        border: 1px solid #475569 !important;
+        border-radius: 8px !important;
+    }
+    
+    /* File Uploader Container in Sidebar */
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+        background-color: #1e293b !important;
+        border: 1px dashed #64748b !important;
+        border-radius: 10px !important;
+        padding: 10px !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] small,
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] div {
+        color: #cbd5e1 !important;
+    }
+    
+    /* Buttons */
     .stButton>button {
         border-radius: 10px;
         font-weight: 600;
@@ -211,7 +249,7 @@ st.markdown("""
     }
     .stButton>button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+        box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -514,6 +552,46 @@ with tab_analytics:
 with tab_receipts:
     st.subheader(f"📑 คลังใบเสร็จและใบกำกับภาษี ({len(receipts_list)} ฉบับ)")
     
+    # Auto-detect zero amount / incomplete receipts
+    zero_receipts = [r for r in receipts_list if float(r.get("total_amount", 0.0)) == 0.0]
+    if zero_receipts:
+        st.markdown(f"""
+        <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;">
+            <h4 style="color: #fca5a5; margin: 0 0 6px 0;">🚨 ตรวจพบใบเสร็จที่ยังไม่มียอดเงิน / อ่านข้อความไม่สำเร็จ ({len(zero_receipts)} รายการ)</h4>
+            <p style="color: #cbd5e1; font-size: 0.88rem; margin: 0 0 10px 0;">เกิดจากไฟล์รูปถ่ายที่ระบบไม่สามารถดึงตัวหนังสือดิจิทัลได้ สามารถกดลบออก หรือกดกรอกยอดเงินจริงได้ทันที:</p>
+        </div>
+        """, unsafe_allow_html=True)
+        for zr in zero_receipts:
+            zc1, zc2, zc3 = st.columns([3, 1.2, 1.2])
+            with zc1:
+                st.markdown(f"🔴 **ID: {zr['id']}** | เลขที่: `{zr.get('receipt_number', '-')}` | วันที่: `{zr.get('date', '-')}` | ร้าน: `{zr.get('store_name', '-')}` (฿0.00)")
+            with zc2:
+                if st.button(f"🗑️ ลบ ID {zr['id']} ทันที", key=f"quick_del_zero_{zr['id']}", type="primary", use_container_width=True):
+                    db.delete_receipt(zr['id'])
+                    st.toast(f"✅ ลบใบเสร็จ ID {zr['id']} สำเร็จ!", icon="🗑️")
+                    st.rerun()
+            with zc3:
+                with st.popover("✏️ กรอกยอดจริง"):
+                    with st.form(f"quick_fix_zero_{zr['id']}"):
+                        q_store = st.text_input("ชื่อร้านค้า:", value=zr.get("store_name", "ร้านโดนใจ"))
+                        q_total = st.number_input("ยอดเงินจริง (บาท):", value=100.0, step=10.0, format="%.2f")
+                        q_vat = st.number_input("VAT (บาท):", value=round(100.0 * 7 / 107, 2), step=5.0, format="%.2f")
+                        if st.form_submit_button("💾 บันทึกยอดเงิน", use_container_width=True):
+                            db.update_receipt(zr['id'], {
+                                "store_name": q_store,
+                                "branch": zr.get("branch", ""),
+                                "receipt_number": zr.get("receipt_number", ""),
+                                "date": zr.get("date", ""),
+                                "total_amount": q_total,
+                                "subtotal_amount": max(0.0, q_total - q_vat),
+                                "vat_amount": q_vat,
+                                "payment_method": "เงินสด/โอน",
+                                "notes": "แก้ไขยอดด้วยตนเอง"
+                            })
+                            st.toast("✅ อัปเดตยอดเงินสำเร็จ!", icon="💾")
+                            st.rerun()
+        st.write("")
+
     # Store Filter Interactive Selector
     store_options = ["ทั้งหมด", "สยามแม็คโคร", "บิ๊กซี ซูเปอร์เซ็นเตอร์", "เอส.อาร์.ซุปเปอร์มาร์ท", "การไฟฟ้าส่วนภูมิภาค (PEA)", "ออร์โร่ โฮม"]
     chosen_store = st.radio("🏢 กรองตามร้านค้า / ผู้ขาย:", store_options, horizontal=True, key="tab2_store_filter")
@@ -522,8 +600,60 @@ with tab_receipts:
     if chosen_store != "ทั้งหมด":
         filtered_receipts = [r for r in receipts_list if chosen_store in r.get("store_name", "")]
         st.caption(f"พบ **{len(filtered_receipts)}** ฉบับ จากผู้ขาย '{chosen_store}'")
-    
+
+    # Fast dictionary lookup map
+    r_dict = {r["id"]: r for r in filtered_receipts}
+
     if filtered_receipts:
+        # Quick action bar above the table
+        col_m1, col_m2 = st.columns([1, 1])
+        with col_m1:
+            with st.expander("🗑️ ลบใบเสร็จออกจากระบบ (เลือก ID ที่ต้องการลบ)"):
+                del_pick_id = st.selectbox(
+                    "เลือก ID ใบเสร็จที่ต้องการลบ:",
+                    options=[r["id"] for r in filtered_receipts],
+                    key="quick_delete_picker",
+                    format_func=lambda x: f"ID {x} | เลขที่: {r_dict.get(x, {}).get('receipt_number', '-')} | ฿{r_dict.get(x, {}).get('total_amount', 0):,.2f} ({r_dict.get(x, {}).get('store_name', '')})"
+                )
+                if del_pick_id:
+                    del_info = r_dict.get(del_pick_id, {})
+                    st.warning(f"⚠️ ยืนยันลบ: ID {del_pick_id} | {del_info.get('store_name', '')} | ฿{del_info.get('total_amount', 0):,.2f}")
+                    if st.button("🗑️ ยืนยันลบรายการนี้", type="primary", use_container_width=True, key=f"btn_confirm_del_top_{del_pick_id}"):
+                        db.delete_receipt(del_pick_id)
+                        st.toast(f"✅ ลบใบเสร็จ ID {del_pick_id} เรียบร้อยแล้ว!", icon="🗑️")
+                        st.rerun()
+        with col_m2:
+            with st.expander("✏️ แก้ไขข้อมูลใบเสร็จ (เลือก ID เพื่อปรับยอด/ชื่อร้าน)"):
+                edit_pick_id = st.selectbox(
+                    "เลือก ID ใบเสร็จที่ต้องการแก้ไข:",
+                    options=[r["id"] for r in filtered_receipts],
+                    key="quick_edit_picker",
+                    format_func=lambda x: f"ID {x} | เลขที่: {r_dict.get(x, {}).get('receipt_number', '-')} | ฿{r_dict.get(x, {}).get('total_amount', 0):,.2f} ({r_dict.get(x, {}).get('store_name', '')})"
+                )
+                if edit_pick_id:
+                    e_info = db.get_receipt_detail(edit_pick_id)
+                    with st.form(f"form_quick_edit_top_{edit_pick_id}"):
+                        qe_store = st.text_input("ชื่อร้านค้า:", value=e_info.get("store_name", ""))
+                        qe_rec_no = st.text_input("เลขที่บิล:", value=e_info.get("receipt_number", ""))
+                        qe_date = st.text_input("วันที่ (YYYY-MM-DD):", value=e_info.get("date", ""))
+                        qe_total = st.number_input("ยอดเงินรวม (บาท):", value=float(e_info.get("total_amount", 0.0)), step=10.0, format="%.2f")
+                        qe_vat = st.number_input("VAT (บาท):", value=float(e_info.get("vat_amount", 0.0)), step=5.0, format="%.2f")
+                        if st.form_submit_button("💾 บันทึกข้อมูลที่แก้ไข", use_container_width=True):
+                            db.update_receipt(edit_pick_id, {
+                                "store_name": qe_store,
+                                "branch": e_info.get("branch", ""),
+                                "receipt_number": qe_rec_no,
+                                "date": qe_date,
+                                "total_amount": qe_total,
+                                "subtotal_amount": max(0.0, qe_total - qe_vat),
+                                "vat_amount": qe_vat,
+                                "payment_method": e_info.get("payment_method", ""),
+                                "notes": e_info.get("notes", "")
+                            })
+                            st.toast("✅ บันทึกการแก้ไขสำเร็จ!", icon="💾")
+                            st.rerun()
+
+        st.write("")
         df_display = pd.DataFrame(filtered_receipts)[["id", "date", "receipt_number", "store_name", "branch", "total_amount", "vat_amount", "payment_method"]]
         df_display.columns = ["ID", "วันที่", "เลขที่ใบเสร็จ", "ร้านค้า", "สาขา", "ยอดรวม (บาท)", "VAT (บาท)", "การชำระเงิน"]
         
@@ -576,6 +706,46 @@ with tab_receipts:
                 with st.expander("📄 ดูโครงสร้าง Markdown ฉบับเต็ม (สกัดโดย MarkItDown)"):
                     with open(md_path, 'r', encoding='utf-8') as f:
                         st.code(f.read(), language="markdown")
+
+            st.write("")
+            col_act1, col_act2 = st.columns([1, 1])
+            with col_act1:
+                with st.expander("✏️ แก้ไขข้อมูลใบเสร็จนี้ (ปรับยอดเงิน/ชื่อร้าน/เลขที่)"):
+                    with st.form(f"edit_receipt_form_{selected_id}"):
+                        e_store = st.text_input("ชื่อร้านค้า / ผู้ขาย:", value=detail.get("store_name", "ร้านโดนใจ"))
+                        e_branch = st.text_input("สาขา:", value=detail.get("branch", "") or "")
+                        e_rec_no = st.text_input("เลขที่ใบเสร็จ / บิล:", value=detail.get("receipt_number", "") or "")
+                        e_date = st.text_input("วันที่ (YYYY-MM-DD):", value=detail.get("date", "") or "")
+                        e_total = st.number_input("ยอดรวมสุทธิ (บาท):", value=float(detail.get("total_amount", 0.0)), step=10.0, format="%.2f")
+                        e_vat = st.number_input("ภาษีมูลค่าเพิ่ม VAT (บาท):", value=float(detail.get("vat_amount", 0.0)), step=5.0, format="%.2f")
+                        e_payment = st.text_input("ช่องทางการชำระเงิน:", value=detail.get("payment_method", "") or "เงินสด/โอน")
+                        e_notes = st.text_input("หมายเหตุเพิ่มเติม:", value=detail.get("notes", "") or "")
+
+                        if st.form_submit_button("💾 บันทึกการแก้ไข", use_container_width=True):
+                            db.update_receipt(selected_id, {
+                                "store_name": e_store,
+                                "branch": e_branch,
+                                "receipt_number": e_rec_no,
+                                "date": e_date,
+                                "total_amount": e_total,
+                                "subtotal_amount": max(0.0, e_total - e_vat),
+                                "vat_amount": e_vat,
+                                "payment_method": e_payment,
+                                "notes": e_notes
+                            })
+                            st.toast("✅ แก้ไขข้อมูลใบเสร็จสำเร็จ!", icon="💾")
+                            st.success("บันทึกการแก้ไขเรียบร้อยแล้ว!")
+                            st.rerun()
+
+            with col_act2:
+                with st.expander("🗑️ ลบใบเสร็จนี้ออกจากระบบ"):
+                    st.warning(f"⚠️ ยืนยันการลบใบเสร็จ ID: {selected_id} ({detail.get('receipt_number', '-')})?")
+                    confirm_del = st.checkbox("ฉันแน่ใจว่าต้องการลบรายการนี้ออกจากฐานข้อมูล", key=f"confirm_del_{selected_id}")
+                    if st.button("🗑️ ยืนยันลบใบเสร็จ", type="primary", use_container_width=True, disabled=not confirm_del, key=f"btn_del_{selected_id}"):
+                        db.delete_receipt(selected_id)
+                        st.toast(f"🗑️ ลบใบเสร็จ ID: {selected_id} สำเร็จแล้ว!", icon="✅")
+                        st.success(f"ลบใบเสร็จ ID {selected_id} เรียบร้อย!")
+                        st.rerun()
     else:
         st.warning("ไม่พบรายการใบเสร็จตามเงื่อนไขที่เลือก กรุณากดปุ่ม 'สแกนและวิเคราะห์ใบเสร็จใหม่' ด้านซ้าย")
 

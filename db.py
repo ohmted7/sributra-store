@@ -139,6 +139,48 @@ def insert_receipt(receipt_data: Dict[str, Any], items: List[Dict[str, Any]] = N
         conn.commit()
         return receipt_id
 
+def delete_receipt(receipt_id: int) -> bool:
+    """Delete a receipt and its associated items from database."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM receipt_items WHERE receipt_id = ?", (receipt_id,))
+        cursor.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
+        conn.commit()
+        return True
+
+def update_receipt(receipt_id: int, updated_data: Dict[str, Any]) -> bool:
+    """Update receipt header information."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE receipts SET
+                receipt_number = ?,
+                date = ?,
+                time = ?,
+                store_name = ?,
+                branch = ?,
+                total_amount = ?,
+                subtotal_amount = ?,
+                vat_amount = ?,
+                payment_method = ?,
+                notes = ?
+            WHERE id = ?
+        """, (
+            updated_data.get("receipt_number", ""),
+            updated_data.get("date", ""),
+            updated_data.get("time", ""),
+            updated_data.get("store_name", "ร้านโดนใจ"),
+            updated_data.get("branch", ""),
+            float(updated_data.get("total_amount", 0.0)),
+            float(updated_data.get("subtotal_amount", 0.0)),
+            float(updated_data.get("vat_amount", 0.0)),
+            updated_data.get("payment_method", ""),
+            updated_data.get("notes", ""),
+            receipt_id
+        ))
+        conn.commit()
+        return True
+
 def get_receipts(start_date: Optional[str] = None, end_date: Optional[str] = None, 
                  search: Optional[str] = None, store: Optional[str] = None) -> List[Dict[str, Any]]:
     with get_connection() as conn:
