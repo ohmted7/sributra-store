@@ -674,14 +674,6 @@ def process_file(file_path: Path, md_converter=None) -> Dict[str, Any]:
             with open(md_output_path, 'w', encoding='utf-8') as f:
                 f.write(md_text)
             receipt_data, items = extract_receipt_fields(md_text, file_path.name)
-        else:
-            if md_converter is None:
-                md_converter = MarkItDown()
-            result = md_converter.convert(str(file_path))
-            md_text = result.text_content or ""
-            with open(md_output_path, 'w', encoding='utf-8') as f:
-                f.write(md_text)
-            receipt_data, items = extract_receipt_fields(md_text, file_path.name)
 
         receipt_data["markdown_file"] = str(md_output_path)
         receipt_id = db.insert_receipt(receipt_data, items)
