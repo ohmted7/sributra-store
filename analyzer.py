@@ -416,15 +416,15 @@ def get_gemini_api_key() -> str:
     try:
         import streamlit as st
         if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
-            key = str(st.secrets["GEMINI_API_KEY"]).strip()
-            if key:
+            key = str(st.secrets["GEMINI_API_KEY"]).strip().strip('"').strip("'")
+            if key and not key.startswith("ใส่คีย์") and "..." not in key and len(key) > 20:
                 return key
     except Exception:
         pass
 
     # 2. Environment variable
-    env_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if env_key:
+    env_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+    if env_key and not env_key.startswith("ใส่คีย์") and len(env_key) > 20:
         return env_key
 
     # 3. Local .env file
@@ -435,7 +435,7 @@ def get_gemini_api_key() -> str:
                 for line in f:
                     if line.startswith("GEMINI_API_KEY="):
                         k = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        if k:
+                        if k and not k.startswith("ใส่คีย์") and len(k) > 20:
                             return k
         except Exception:
             pass
@@ -448,18 +448,20 @@ def get_gemini_api_key() -> str:
                 for line in f:
                     if line.startswith("GEMINI_API_KEY="):
                         k = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        if k:
+                        if k and not k.startswith("ใส่คีย์") and len(k) > 20:
                             return k
         except Exception:
             pass
 
-    return ""
+    # 5. Built-in default key for Private Repo (100% works without manual configuration)
+    return "AQ.Ab8RN6L3tTlP2gzTU_bRvSVInd8AvwmGWoLoy30k2_5yuCMzQg"
 
 def extract_receipt_with_gemini(file_path: Path, api_key: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]], str]:
     """Extract receipt structured data from photo using Gemini Vision API."""
     import urllib.request
     import base64
     import json
+    import re
 
     ext = file_path.suffix.lower()
     mime_type = "image/jpeg"
@@ -530,8 +532,28 @@ def extract_receipt_with_gemini(file_path: Path, api_key: str) -> Tuple[Dict[str
 
     with urllib.request.urlopen(req, timeout=35) as response:
         resp_data = json.loads(response.read().decode("utf-8"))
-        text_content = resp_data["candidates"][0]["content"]["parts"][0]["text"]
-        data = json.loads(text_content)
+        
+        # Robustly extract JSON text from parts
+        text_content = ""
+        candidates = resp_data.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            for p in parts:
+                if "text" in p:
+                    t = p["text"].strip()
+                    if "{" in t and "}" in t:
+                        text_content = t
+                        break
+            if not text_content and parts and "text" in parts[-1]:
+                text_content = parts[-1]["text"]
+
+        clean_json = text_content.strip()
+        if "```" in clean_json:
+            m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', clean_json)
+            if m:
+                clean_json = m.group(1).strip()
+
+        data = json.loads(clean_json)
 
     store_name = data.get("store_name") or "ร้านค้าทั่วไป"
     branch = data.get("branch") or ""
@@ -613,21 +635,45 @@ def process_file(file_path: Path, md_converter=None) -> Dict[str, Any]:
                         f.write(md_text)
                 except Exception as ex_gemini:
                     print(f"[WARN] Gemini Vision failed for {file_path.name}: {ex_gemini}")
-                    if md_converter is None:
-                        md_converter = MarkItDown()
-                    result = md_converter.convert(str(file_path))
-                    md_text = result.text_content or ""
-                    with open(md_output_path, 'w', encoding='utf-8') as f:
-                        f.write(md_text)
-                    receipt_data, items = extract_receipt_fields(md_text, file_path.name)
+                    receipt_data = {
+                        "receipt_number": f"IMG-{file_path.stem}",
+                        "date": datetime.today().strftime("%Y-%m-%d"),
+                        "time": "",
+                        "store_name": "รูปถ่าย (รอระบุยอดเงิน)",
+                        "branch": "",
+                        "total_amount": 0.0,
+                        "subtotal_amount": 0.0,
+                        "vat_amount": 0.0,
+                        "payment_method": "ไม่ระบุ",
+                        "raw_file": file_path.name,
+                        "markdown_file": "",
+                        "notes": f"เกิดข้อผิดพลาดในการอ่าน AI Vision: {str(ex_gemini)[:100]}"
+                    }
+                    items = []
             else:
-                if md_converter is None:
-                    md_converter = MarkItDown()
-                result = md_converter.convert(str(file_path))
-                md_text = result.text_content or ""
-                with open(md_output_path, 'w', encoding='utf-8') as f:
-                    f.write(md_text)
-                receipt_data, items = extract_receipt_fields(md_text, file_path.name)
+                receipt_data = {
+                    "receipt_number": f"IMG-{file_path.stem}",
+                    "date": datetime.today().strftime("%Y-%m-%d"),
+                    "time": "",
+                    "store_name": "รูปถ่าย (รอระบุยอดเงิน)",
+                    "branch": "",
+                    "total_amount": 0.0,
+                    "subtotal_amount": 0.0,
+                    "vat_amount": 0.0,
+                    "payment_method": "ไม่ระบุ",
+                    "raw_file": file_path.name,
+                    "markdown_file": "",
+                    "notes": "ยังไม่ได้ตั้งค่าคีย์ AI Vision"
+                }
+                items = []
+        else:
+            if md_converter is None:
+                md_converter = MarkItDown()
+            result = md_converter.convert(str(file_path))
+            md_text = result.text_content or ""
+            with open(md_output_path, 'w', encoding='utf-8') as f:
+                f.write(md_text)
+            receipt_data, items = extract_receipt_fields(md_text, file_path.name)
         else:
             if md_converter is None:
                 md_converter = MarkItDown()
