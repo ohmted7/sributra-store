@@ -195,8 +195,17 @@ def get_receipts(start_date: Optional[str] = None, end_date: Optional[str] = Non
             query += " AND date <= ?"
             params.append(end_date)
         if store and store != "ทั้งหมด":
-            query += " AND store_name = ?"
-            params.append(store)
+            if "การไฟฟ้า" in store:
+                query += " AND store_name LIKE '%การไฟฟ้า%'"
+            elif "แม็คโคร" in store or "Makro" in store:
+                query += " AND (store_name LIKE '%แม็คโคร%' OR store_name LIKE '%Makro%')"
+            elif "บิ๊กซี" in store or "Big C" in store:
+                query += " AND (store_name LIKE '%บิ๊กซี%' OR store_name LIKE '%Big C%')"
+            elif "เอส.อาร์" in store:
+                query += " AND store_name LIKE '%เอส.อาร์%'"
+            else:
+                query += " AND store_name = ?"
+                params.append(store)
         if search:
             query += " AND (receipt_number LIKE ? OR notes LIKE ? OR branch LIKE ?)"
             wildcard = f"%{search}%"

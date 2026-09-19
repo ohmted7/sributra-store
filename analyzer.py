@@ -517,6 +517,14 @@ def parse_ai_json_to_receipt(data: Dict[str, Any], file_path: Path) -> Tuple[Dic
     except Exception:
         subtotal_amount = max(0.0, total_amount - vat_amount)
 
+    if "การไฟฟ้า" in store_name or "PEA" in store_name:
+        store_name = "การไฟฟ้าส่วนภูมิภาค (PEA)"
+        if not branch:
+            branch = "กฟภ.หล่มสัก / ร้านศรีบุตรา"
+        if vat_amount == 0.0 and total_amount > 0:
+            vat_amount = round(total_amount * 7 / 107, 2)
+            subtotal_amount = round(total_amount - vat_amount, 2)
+
     payment_method = data.get("payment_method") or "เงินสด"
     raw_items = data.get("items") or []
 
