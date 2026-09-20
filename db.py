@@ -67,17 +67,39 @@ def insert_receipt(receipt_data: Dict[str, Any], items: List[Dict[str, Any]] = N
     with get_connection() as conn:
         cursor = conn.cursor()
         
-        # Check if duplicate receipt exists by raw_file first, then by receipt_number
+        # Check if duplicate receipt exists
         existing = None
-        if receipt_data.get("raw_file"):
-            cursor.execute("SELECT id FROM receipts WHERE raw_file = ?", (receipt_data["raw_file"],))
+        rec_num = str(receipt_data.get("receipt_number", "")).strip()
+        new_total = float(receipt_data.get("total_amount", 0.0))
+        
+        # 1. Primary: Receipt Number (if actual business invoice/receipt number)
+        if rec_num and not rec_num.startswith("REC-") and not rec_num.startswith("IMG-") and not rec_num.startswith("INV-") and len(rec_num) >= 5:
+            cursor.execute("SELECT id, total_amount, vat_amount, receipt_number FROM receipts WHERE receipt_number = ?", (rec_num,))
             existing = cursor.fetchone()
-        elif receipt_data.get("receipt_number") and not receipt_data.get("receipt_number", "").startswith("REC-") and not receipt_data.get("receipt_number", "").startswith("INV-"):
-            cursor.execute("SELECT id FROM receipts WHERE receipt_number = ?", (receipt_data["receipt_number"],))
+            
+        # 2. Secondary: Raw file name
+        if not existing and receipt_data.get("raw_file"):
+            cursor.execute("SELECT id, total_amount, vat_amount, receipt_number FROM receipts WHERE raw_file = ?", (receipt_data["raw_file"],))
+            existing = cursor.fetchone()
+
+        # 3. Tertiary: Same store + Same date + Same total amount (prevent duplicate snaps of same bill)
+        if not existing and new_total > 0 and receipt_data.get("store_name") not in ["ร้านค้าทั่วไป", "รูปถ่าย (รอระบุยอดเงิน)"]:
+            cursor.execute("""
+                SELECT id, total_amount, vat_amount, receipt_number FROM receipts 
+                WHERE store_name = ? AND date = ? AND ABS(total_amount - ?) < 0.01
+            """, (receipt_data.get("store_name", ""), receipt_data.get("date", ""), new_total))
             existing = cursor.fetchone()
 
         if existing:
             receipt_id = existing["id"]
+            cur_total = float(existing["total_amount"] or 0.0)
+            # If current total is already the full grand total, preserve it
+            final_total = max(cur_total, new_total)
+            final_vat = float(receipt_data.get("vat_amount", 0.0)) if new_total >= cur_total else float(existing["vat_amount"] or 0.0)
+            final_subtotal = float(receipt_data.get("subtotal_amount", 0.0)) if new_total >= cur_total else round(final_total - final_vat, 2)
+            final_store = receipt_data.get("store_name") if receipt_data.get("store_name") not in ["ร้านค้าทั่วไป", "รูปถ่าย (รอระบุยอดเงิน)"] else existing.get("store_name", "ร้านโดนใจ")
+            final_rec_num = rec_num if (rec_num and not rec_num.startswith("IMG-")) else existing["receipt_number"]
+
             cursor.execute("""
                 UPDATE receipts SET
                     receipt_number = ?, date = ?, time = ?, store_name = ?, branch = ?,
@@ -85,21 +107,22 @@ def insert_receipt(receipt_data: Dict[str, Any], items: List[Dict[str, Any]] = N
                     raw_file = ?, markdown_file = ?, notes = ?
                 WHERE id = ?
             """, (
-                receipt_data.get("receipt_number", ""),
+                final_rec_num,
                 receipt_data.get("date", datetime.today().strftime("%Y-%m-%d")),
                 receipt_data.get("time", ""),
-                receipt_data.get("store_name", "ร้านโดนใจ"),
+                final_store,
                 receipt_data.get("branch", ""),
-                float(receipt_data.get("total_amount", 0.0)),
-                float(receipt_data.get("subtotal_amount", 0.0)),
-                float(receipt_data.get("vat_amount", 0.0)),
+                final_total,
+                final_subtotal,
+                final_vat,
                 receipt_data.get("payment_method", ""),
                 receipt_data.get("raw_file", ""),
                 receipt_data.get("markdown_file", ""),
                 receipt_data.get("notes", ""),
                 receipt_id
             ))
-            cursor.execute("DELETE FROM receipt_items WHERE receipt_id = ?", (receipt_id,))
+            if items:
+                cursor.execute("DELETE FROM receipt_items WHERE receipt_id = ?", (receipt_id,))
         else:
             cursor.execute("""
                 INSERT INTO receipts (
